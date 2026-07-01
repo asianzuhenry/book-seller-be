@@ -15,7 +15,6 @@ const app = express();
 connectDB();
 
 const allowedOrigins = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [];
-
 app.use(cors({ origin: allowedOrigins, methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] }));
 app.use(helmet());
 app.use(express.json());
