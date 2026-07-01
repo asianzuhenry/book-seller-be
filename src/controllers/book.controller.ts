@@ -30,7 +30,7 @@ export const getAllBooks = async (req: Request, res: Response) => {
 export const getBookById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params as { id: string };
-
+    
     const book = await Book.findById(id);
 
     if (!book) {

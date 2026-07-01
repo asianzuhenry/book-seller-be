@@ -14,7 +14,7 @@ const app = express();
 
 connectDB();
 
-const allowedOrigins = ["http://localhost:5173", "https://example.com"];
+const allowedOrigins = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : [];
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(helmet());
