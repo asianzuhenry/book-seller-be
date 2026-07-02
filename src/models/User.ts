@@ -27,6 +27,12 @@ const userSchema = new Schema(
       enum: Object.values(Role),
       default: Role.CUSTOMER,
     },
+    purchasedBooks: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Book',
+      },
+    ],
   },
   {
     timestamps: true,
