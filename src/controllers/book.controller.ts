@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { z } from "zod";
 import Book from "../models/Book";
 import { uploadToR2 } from "../utils/uploadToR2";
+import { deleteFromR2 } from "../utils/deleteFromR2";
 
 const createBookSchema = z.object({
   title: z.string().min(3),
@@ -133,6 +134,7 @@ export const updateBook = async (req: Request, res: Response) => {
   }
 };
 
+
 export const deleteBook = async (req: Request, res: Response) => {
   try {
     const { id } = req.params as { id: string };
@@ -143,6 +145,17 @@ export const deleteBook = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Book not found" });
     }
 
+    if (book.fileKey) {
+      try {
+        await deleteFromR2(book.fileKey);
+      } catch (r2Error) {
+        console.error("Failed to delete file from R2:", r2Error);
+        return res.status(500).json({
+          message: "Failed to delete file from storage",
+        });
+      }
+    }
+
     await Book.findByIdAndDelete(id);
 
     res.json({
@@ -150,6 +163,7 @@ export const deleteBook = async (req: Request, res: Response) => {
       message: "Book deleted successfully",
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

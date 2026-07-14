@@ -29,5 +29,6 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/books", bookRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/payments", require("./routes/payments").default);
 
 export default app;
