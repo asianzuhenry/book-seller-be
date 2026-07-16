@@ -3,9 +3,12 @@ import jwt from "jsonwebtoken";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
-    id: string;
+    // align with other parts of the codebase which expect a userId and role
+    userId: string;
+    // keep backward-compatible fields
+    id?: string;
     email?: string;
-    role?: string;
+    role: string;
   };
 }
 
@@ -68,9 +71,10 @@ export const protect = (
     console.log("Decoded token:", decoded); // Log the decoded token for debugging
     
     req.user = {
+      userId: decoded.userId,
       id: decoded.userId,
       email: decoded.email,
-      role: decoded.role,
+      role: decoded.role ?? "",
     };
 
     next();

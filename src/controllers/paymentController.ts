@@ -192,6 +192,13 @@ export const initializePayment = async (req: AuthenticatedRequest, res: Response
       .substr(2, 9)
       .toUpperCase()}`;
 
+    if (book.price == null) {
+      return res.status(400).json({
+        success: false,
+        message: "Book price is not available",
+      });
+    }
+
     const purchase = await Purchase.create({
       book: bookId,
       user: userId,
