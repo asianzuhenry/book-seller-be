@@ -1,38 +1,17 @@
-/**
- * =============================================================================
- * PESAPAL BOOK PAYMENTS ROUTE
- * =============================================================================
- * Handles book purchase payment flows via Pesapal API v3.
- *
- * Endpoints:
- *  POST   /api/payments/initialize       — Start payment for a book
- *  GET    /api/payments/status/:id       — Check payment status
- *  GET    /api/payments/ipn              — Pesapal IPN callback
- *  GET    /api/payments/PesapalIPN       — Pesapal alternative IPN callback
- *
- * Required ENV variables:
- *  PESAPAL_API_URL, PESAPAL_CONSUMER_KEY, PESAPAL_CONSUMER_SECRET,
- *  PESAPAL_CALLBACK_URL, IPN_URL, FRONTEND_URL, MOCK_PAYMENT
- * =============================================================================
- */
-
-import { Router, Request, Response } from "express";
+// controllers/paymentController.ts
+import { Response } from "express";
 import axios, { AxiosError } from "axios";
 import Book from "../models/Book";
-import Purchase from "../models/Purchase"; // adjust path if yours differs
-
-const router = Router();
+import Purchase, { PurchaseStatus } from "../models/Purchase";
+import { AuthenticatedRequest } from "../middleware/auth";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type PurchaseStatus = "pending" | "completed" | "failed";
-
 interface InitializePaymentBody {
   bookId: string;
   buyer: {
-    userId: string;
     email: string;
     firstName: string;
     lastName?: string;
@@ -171,18 +150,23 @@ const registerIPN = async (token: string): Promise<string | null> => {
 // ---------------------------------------------------------------------------
 // POST /api/payments/initialize
 // ---------------------------------------------------------------------------
-export const initializePayment = async (req: Request, res: Response) => {
+export const initializePayment = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, message: "Not authorized" });
+    }
+
     const { bookId, buyer } = req.body as InitializePaymentBody;
+    const userId = req.user.id;
 
     if (!bookId) {
       return res.status(400).json({ success: false, message: "bookId is required" });
     }
 
-    if (!buyer || !buyer.userId || !buyer.email || !buyer.firstName) {
+    if (!buyer || !buyer.email || !buyer.firstName) {
       return res.status(400).json({
         success: false,
-        message: "buyer.userId, buyer.email, and buyer.firstName are required",
+        message: "buyer.email and buyer.firstName are required",
       });
     }
 
@@ -191,10 +175,9 @@ export const initializePayment = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "Book not found" });
     }
 
-    // Prevent double purchase
     const existing = await Purchase.findOne({
       book: bookId,
-      user: buyer.userId,
+      user: userId,
       status: "completed" as PurchaseStatus,
     });
     if (existing) {
@@ -209,10 +192,9 @@ export const initializePayment = async (req: Request, res: Response) => {
       .substr(2, 9)
       .toUpperCase()}`;
 
-    // Pending record up front so the IPN handler has something to update.
     const purchase = await Purchase.create({
       book: bookId,
-      user: buyer.userId,
+      user: userId,
       amount: book.price,
       currency: "UGX",
       merchantReference: orderReference,
@@ -336,8 +318,12 @@ export const initializePayment = async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 // GET /api/payments/status/:paymentTrackingId
 // ---------------------------------------------------------------------------
-export const getPaymentStatus = async (req: Request, res: Response) => {
+export const getPaymentStatus = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, message: "Not authorized" });
+    }
+
     const { paymentTrackingId } = req.params as { paymentTrackingId: string };
 
     console.log("🔍 [Payments] Checking status for tracking ID:", paymentTrackingId);
@@ -412,7 +398,7 @@ export const getPaymentStatus = async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 // GET /api/payments/ipn
 // ---------------------------------------------------------------------------
-export const handleIPN = async (req: Request, res: Response) => {
+export const handleIPN = async (req: AuthenticatedRequest, res: Response) => {
   const { OrderTrackingId, OrderMerchantReference, OrderNotificationType } = req.query as {
     OrderTrackingId?: string;
     OrderMerchantReference?: string;
@@ -468,17 +454,6 @@ export const handleIPN = async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 // GET /api/payments/PesapalIPN
 // ---------------------------------------------------------------------------
-export const handlePesapalIPNAlt = async (req: Request, res: Response) => {
-  // Mirrors /ipn — Pesapal sometimes caches this alternate path.
+export const handlePesapalIPNAlt = async (req: AuthenticatedRequest, res: Response) => {
   return handleIPN(req, res);
 };
-
-// ---------------------------------------------------------------------------
-// Router wiring
-// ---------------------------------------------------------------------------
-router.post("/initialize", initializePayment);
-router.get("/status/:paymentTrackingId", getPaymentStatus);
-router.get("/ipn", handleIPN);
-router.get("/PesapalIPN", handlePesapalIPNAlt);
-
-export default router;

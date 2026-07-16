@@ -10,7 +10,7 @@ export interface AuthenticatedRequest extends Request {
 }
 
 interface DecodedToken {
-  id: string;
+  userId: string;
   email?: string;
   role?: string;
   iat: number;
@@ -65,8 +65,10 @@ export const protect = (
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as DecodedToken;
 
+    console.log("Decoded token:", decoded); // Log the decoded token for debugging
+    
     req.user = {
-      id: decoded.id,
+      id: decoded.userId,
       email: decoded.email,
       role: decoded.role,
     };

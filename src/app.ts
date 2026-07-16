@@ -9,6 +9,7 @@ import connectDB from "./config/mongodb";
 import authRoutes from "./routes/auth.routes";
 import bookRoutes from "./routes/book.routes";
 import userRoutes from "./routes/user.routes";
+import purchaseRoutes from "./routes/purchases";
 
 const app = express();
 
@@ -30,5 +31,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/books", bookRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/payments", require("./routes/payments").default);
+app.use("/api/purchases", purchaseRoutes);
 
 export default app;
