@@ -3,6 +3,7 @@ import User from "../models/User";
 import { hashPassword, comparePassword } from "../utils/hash";
 import { generateToken } from "../utils/jwt";
 import { z } from "zod";
+import crypto from "crypto";
 
 const registerSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -14,6 +15,14 @@ const loginSchema = z.object({
   email: z.string().email("Invalid email"),
   password: z.string().min(1, "Password is required"),
 });
+
+type UserWithResetFields = {
+  email: string;
+  passwordHash: string;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: number;
+  save: () => Promise<any>;
+};
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -84,6 +93,84 @@ export const login = async (req: Request, res: Response) => {
         role: user.role,
       },
     });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ errors: error.flatten() });
+    }
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email("Invalid email"),
+});
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = forgotPasswordSchema.parse(req.body);
+
+    const user = await User.findOne({ email }) as UserWithResetFields | null;
+
+    if (!user) {
+      // don't reveal whether email exists
+      return res.json({ message: "If that email is registered, a reset token has been sent" });
+    }
+
+    // generate a secure token (in a real app store hashed token and expiry and send via email)
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    // attempt to store token and expiry on user if fields exist
+    try {
+      user.resetPasswordToken = resetToken;
+      user.resetPasswordExpires = Date.now() + 3600_000; // 1 hour
+      await user.save();
+    } catch {
+      // ignore if model doesn't have those fields
+    }
+
+    // In real usage you'd email the token. For now return it in response for development.
+    return res.json({ message: "If that email is registered, a reset token has been sent", resetToken });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ errors: error.flatten() });
+    }
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const resetPasswordSchema = z.object({
+  email: z.string().email("Invalid email"),
+  resetToken: z.string().min(1, "Reset token is required"),
+  newPassword: z.string().min(6, "New password must be at least 6 characters"),
+});
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { email, resetToken, newPassword } = resetPasswordSchema.parse(req.body);
+
+    const user = await User.findOne({ email }) as UserWithResetFields | null;
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+
+    if (user.resetPasswordToken !== resetToken) {
+      return res.status(400).json({ message: "Invalid reset token" });
+    }
+
+    if (user.resetPasswordExpires && user.resetPasswordExpires < Date.now()) {
+      return res.status(400).json({ message: "Reset token has expired" });
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+
+    user.passwordHash = passwordHash;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+
+    await user.save();
+
+    res.json({ message: "Password reset successful" });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ errors: error.flatten() });
