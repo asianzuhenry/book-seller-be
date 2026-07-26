@@ -16,14 +16,6 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-type UserWithResetFields = {
-  email: string;
-  passwordHash: string;
-  resetPasswordToken?: string;
-  resetPasswordExpires?: number;
-  save: () => Promise<any>;
-};
-
 export const register = async (req: Request, res: Response) => {
   try {
     const validated = registerSchema.parse(req.body);
@@ -109,26 +101,21 @@ export const forgotPassword = async (req: Request, res: Response) => {
   try {
     const { email } = forgotPasswordSchema.parse(req.body);
 
-    const user = await User.findOne({ email }) as UserWithResetFields | null;
+    const user = await User.findOne({ email });
 
     if (!user) {
       // don't reveal whether email exists
       return res.json({ message: "If that email is registered, a reset token has been sent" });
     }
 
-    // generate a secure token (in a real app store hashed token and expiry and send via email)
+    // generate a secure token
     const resetToken = crypto.randomBytes(32).toString("hex");
 
-    // attempt to store token and expiry on user if fields exist
-    try {
-      user.resetPasswordToken = resetToken;
-      user.resetPasswordExpires = Date.now() + 3600_000; // 1 hour
-      await user.save();
-    } catch {
-      // ignore if model doesn't have those fields
-    }
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600_000; // 1 hour
+    await user.save();
 
-    // In real usage you'd email the token. For now return it in response for development.
+    // Returns token for development testing (can be sent via email in production)
     return res.json({ message: "If that email is registered, a reset token has been sent", resetToken });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -148,7 +135,7 @@ export const resetPassword = async (req: Request, res: Response) => {
   try {
     const { email, resetToken, newPassword } = resetPasswordSchema.parse(req.body);
 
-    const user = await User.findOne({ email }) as UserWithResetFields | null;
+    const user = await User.findOne({ email });
 
     if (!user) {
       return res.status(400).json({ message: "Invalid request" });

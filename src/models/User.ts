@@ -33,6 +33,12 @@ const userSchema = new Schema(
         ref: 'Book',
       },
     ],
+    resetPasswordToken: {
+      type: String,
+    },
+    resetPasswordExpires: {
+      type: Number,
+    },
   },
   {
     timestamps: true,
