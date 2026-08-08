@@ -7,9 +7,10 @@ import { AuthenticatedRequest } from "../middleware/auth";
 // GET /api/purchases/my-books
 // ---------------------------------------------------------------------------
 /**
- * Returns all books the logged-in user has successfully purchased,
- * with the book details populated so the frontend can render a library
- * grid without a second round-trip.
+ * Returns all completed purchases for the logged-in user with book details
+ * populated. Each entry also exposes contentType and hasVideo so the
+ * frontend library grid can show a "Includes Video" badge without an
+ * extra round-trip.
  */
 export const getMyPurchases = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -18,16 +19,24 @@ export const getMyPurchases = async (req: AuthenticatedRequest, res: Response) =
     }
 
     const purchases = await Purchase.find({
-      user: req.user.id,
+      user:   req.user.id,
       status: "completed",
     })
       .populate("book")
       .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      data: purchases,
-    });
+    // Shape each purchase so the frontend gets a flat, convenient object
+    const data = purchases.map((p) => ({
+      purchaseId:   p._id,
+      purchasedAt:  p.createdAt,
+      amount:       p.amount,
+      currency:     p.currency,
+      contentType:  p.contentType ?? "pdf",
+      hasVideo:     p.contentType === "pdf_and_video",
+      book:         p.book,  // fully populated Book document
+    }));
+
+    res.json({ success: true, data });
   } catch (error) {
     console.error("❌ [Purchases] Failed to fetch user purchases:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -38,9 +47,10 @@ export const getMyPurchases = async (req: AuthenticatedRequest, res: Response) =
 // GET /api/purchases/check/:bookId
 // ---------------------------------------------------------------------------
 /**
- * Lightweight check the reader page can call before loading a PDF:
- * "does this user own this book?" Returns a boolean rather than the
- * full purchase record, since the reader only needs a yes/no gate.
+ * Access gate for the reader page.
+ * Returns hasAccess (bool), and if the user owns the book, also tells
+ * the frontend whether they have video access — so the player can be
+ * shown or hidden without a separate call.
  */
 export const checkBookAccess = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -51,15 +61,28 @@ export const checkBookAccess = async (req: AuthenticatedRequest, res: Response) 
     const { bookId } = req.params as { bookId: string };
 
     const purchase = await Purchase.findOne({
-      user: req.user.id,
-      book: bookId,
+      user:   req.user.id,
+      book:   bookId,
       status: "completed",
     });
+
+    if (!purchase) {
+      return res.json({
+        success: true,
+        data: {
+          hasAccess:    false,
+          hasVideo:     false,
+          contentType:  null,
+        },
+      });
+    }
 
     res.json({
       success: true,
       data: {
-        hasAccess: !!purchase,
+        hasAccess:   true,
+        hasVideo:    purchase.contentType === "pdf_and_video",
+        contentType: purchase.contentType ?? "pdf",
       },
     });
   } catch (error) {
