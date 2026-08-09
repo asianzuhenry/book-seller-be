@@ -26,15 +26,19 @@ export const getMyPurchases = async (req: AuthenticatedRequest, res: Response) =
       .sort({ createdAt: -1 });
 
     // Shape each purchase so the frontend gets a flat, convenient object
-    const data = purchases.map((p) => ({
-      purchaseId:   p._id,
-      purchasedAt:  p.createdAt,
-      amount:       p.amount,
-      currency:     p.currency,
-      contentType:  p.contentType ?? "pdf",
-      hasVideo:     p.contentType === "pdf_and_video",
-      book:         p.book,  // fully populated Book document
-    }));
+    const data = purchases.map((p) => {
+      const contentType = (p as any).contentType ?? "pdf";
+
+      return {
+        purchaseId:   p._id,
+        purchasedAt:  p.createdAt,
+        amount:       p.amount,
+        currency:     p.currency,
+        contentType,
+        hasVideo:     contentType === "pdf_and_video",
+        book:         p.book,  // fully populated Book document
+      };
+    });
 
     res.json({ success: true, data });
   } catch (error) {
@@ -77,12 +81,14 @@ export const checkBookAccess = async (req: AuthenticatedRequest, res: Response) 
       });
     }
 
+    const purchaseContentType = (purchase as any).contentType ?? "pdf";
+
     res.json({
       success: true,
       data: {
         hasAccess:   true,
-        hasVideo:    purchase.contentType === "pdf_and_video",
-        contentType: purchase.contentType ?? "pdf",
+        hasVideo:    purchaseContentType === "pdf_and_video",
+        contentType: purchaseContentType,
       },
     });
   } catch (error) {

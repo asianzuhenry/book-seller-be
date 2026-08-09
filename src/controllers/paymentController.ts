@@ -31,6 +31,14 @@ interface PesapalTransactionStatusResponse {
 
 // Content type included in a purchase
 type PurchaseContentType = "pdf" | "pdf_and_video";
+type PurchaseWithContent = {
+  orderTrackingId?: string;
+  contentType?: PurchaseContentType;
+  amount?: number;
+  status?: string;
+  save?: () => Promise<any>;
+  [key: string]: unknown;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -197,8 +205,8 @@ export const initializePayment = async (req: AuthenticatedRequest, res: Response
       currency:          "UGX",
       merchantReference: orderReference,
       status:            "pending" as PurchaseStatus,
-      contentType,                   // ← "pdf" | "pdf_and_video"
-    });
+      ...(contentType ? { contentType } : {}),
+    } as any);
 
     // ── Mock mode ────────────────────────────────────────────────────────
     if (process.env.MOCK_PAYMENT === "true") {
@@ -317,11 +325,11 @@ export const getPaymentStatus = async (req: AuthenticatedRequest, res: Response)
     if (process.env.MOCK_PAYMENT === "true" || paymentTrackingId.startsWith("MOCK-PAY-")) {
       console.log("🧪 [Payments] MOCK STATUS — marking completed");
 
-      const purchase = await Purchase.findOneAndUpdate(
+      const purchase = (await Purchase.findOneAndUpdate(
         { orderTrackingId: paymentTrackingId },
         { status: "completed" as PurchaseStatus },
         { new: true }
-      ).populate("book");
+      ).populate("book")) as PurchaseWithContent | null;
 
       return res.status(200).json({
         success: true,
@@ -352,22 +360,22 @@ export const getPaymentStatus = async (req: AuthenticatedRequest, res: Response)
     const description = response.data.payment_status_description;
     console.log("✅ [Payments] Status:", description);
 
-    let purchase = null;
+    let purchase: PurchaseWithContent | null = null;
 
     if (description === "Completed") {
-      purchase = await Purchase.findOneAndUpdate(
+      purchase = (await Purchase.findOneAndUpdate(
         { orderTrackingId: paymentTrackingId },
         { status: "completed" as PurchaseStatus },
         { new: true }
-      );
+      )) as PurchaseWithContent | null;
     } else if (description === "Failed") {
-      purchase = await Purchase.findOneAndUpdate(
+      purchase = (await Purchase.findOneAndUpdate(
         { orderTrackingId: paymentTrackingId },
         { status: "failed" as PurchaseStatus },
         { new: true }
-      );
+      )) as PurchaseWithContent | null;
     } else {
-      purchase = await Purchase.findOne({ orderTrackingId: paymentTrackingId });
+      purchase = (await Purchase.findOne({ orderTrackingId: paymentTrackingId })) as PurchaseWithContent | null;
     }
 
     return res.status(200).json({
